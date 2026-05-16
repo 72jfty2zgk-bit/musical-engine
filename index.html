@@ -117,6 +117,7 @@ function generateMap() {
   for (let r = 0; r < 2; r++) for (let c = COLS / 2 - 2; c <= COLS / 2 + 1; c++) map[r][c] = 0;
   // Place base
   map[ROWS - 1][Math.floor(COLS / 2)] = BASE;
+  cacheBackground();
 }
 
 // --- Game State ---
@@ -125,16 +126,78 @@ let enemies = [], bullets = [], particles = [];
 let player = null;
 let gameRunning = false;
 let gameOverFlag = false;
+let waveSpawning = false;
 let baseAlive = true;
+
+// --- Offscreen canvas for static background ---
+const bgCanvas = document.createElement('canvas');
+bgCanvas.width = W; bgCanvas.height = H;
+const bgCtx = bgCanvas.getContext('2d');
+
+function cacheBackground() {
+  bgCtx.clearRect(0, 0, W, H);
+  // Grid
+  bgCtx.strokeStyle = '#1a1a1a';
+  bgCtx.lineWidth = 1;
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      bgCtx.strokeRect(c * TILE, r * TILE, TILE, TILE);
+    }
+  }
+  // Map tiles
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const x = c * TILE, y = r * TILE;
+      const tile = map[r][c];
+      if (tile === 0) continue;
+      if (tile === WALL) {
+        bgCtx.fillStyle = '#963';
+        bgCtx.fillRect(x, y, TILE, TILE);
+        bgCtx.strokeStyle = '#741';
+        bgCtx.lineWidth = 1;
+        bgCtx.strokeRect(x + 1, y + 1, TILE - 2, TILE - 2);
+        bgCtx.strokeStyle = '#852';
+        bgCtx.beginPath();
+        bgCtx.moveTo(x, y + TILE / 2); bgCtx.lineTo(x + TILE, y + TILE / 2);
+        bgCtx.moveTo(x + TILE / 2, y); bgCtx.lineTo(x + TILE / 2, y + TILE / 2);
+        bgCtx.moveTo(x + TILE / 4, y + TILE / 2); bgCtx.lineTo(x + TILE / 4, y + TILE);
+        bgCtx.moveTo(x + TILE * 3 / 4, y + TILE / 2); bgCtx.lineTo(x + TILE * 3 / 4, y + TILE);
+        bgCtx.stroke();
+      } else if (tile === STEEL) {
+        bgCtx.fillStyle = '#aaa';
+        bgCtx.fillRect(x, y, TILE, TILE);
+        bgCtx.fillStyle = '#ccc';
+        bgCtx.fillRect(x + 3, y + 3, TILE - 6, TILE - 6);
+      } else if (tile === WATER) {
+        bgCtx.fillStyle = '#229';
+        bgCtx.fillRect(x, y, TILE, TILE);
+      } else if (tile === BASE) {
+        bgCtx.fillStyle = '#ff4';
+        bgCtx.fillRect(x + TILE / 2 - 8, y + TILE / 2 - 8, 16, 16);
+        bgCtx.fillStyle = '#f80';
+        bgCtx.beginPath();
+        bgCtx.arc(x + TILE / 2, y + TILE / 2, 6, 0, Math.PI * 2);
+        bgCtx.fill();
+      }
+    }
+  }
+}
 
 // --- Input ---
 const keys = {};
 document.addEventListener('keydown', e => {
-  keys[e.code] = true;
-  if (e.code === 'KeyR') resetGame();
-  e.preventDefault();
+  if (e.code === 'Space' || e.code.startsWith('Arrow') || e.code === 'KeyR') {
+    e.preventDefault();
+    keys[e.code] = true;
+    if (e.code === 'KeyR') resetGame();
+  }
 });
-document.addEventListener('keyup', e => { keys[e.code] = false; e.preventDefault(); });
+document.addEventListener('keyup', e => {
+  if (e.code === 'Space' || e.code.startsWith('Arrow')) {
+    e.preventDefault();
+    keys[e.code] = false;
+  }
+});
 
 // --- Classes ---
 class Tank {
@@ -272,6 +335,7 @@ class Bullet {
       const tile = map[r][c];
       if (tile === WALL) {
         map[r][c] = 0;
+        cacheBackground();
         this.alive = false;
         for (let i = 0; i < 4; i++) particles.push(new Particle(c * TILE + TILE / 2, r * TILE + TILE / 2, '#963'));
         return;
@@ -284,6 +348,7 @@ class Bullet {
       if (tile === BASE) {
         this.alive = false;
         map[r][c] = 0;
+        cacheBackground();
         baseAlive = false;
         for (let i = 0; i < 20; i++) particles.push(new Particle(c * TILE + TILE / 2, r * TILE + TILE / 2, '#f00'));
         return;
@@ -382,7 +447,7 @@ function update() {
     else if (keys['ArrowDown']) { player.dir = 2; player.moveForward(); }
     else if (keys['ArrowLeft']) { player.dir = 3; player.moveForward(); }
     else if (keys['ArrowRight']) { player.dir = 1; player.moveForward(); }
-    if (keys['Space']) bullets.push(player.shoot());
+    if (keys['Space']) { const b = player.shoot(); if (b) bullets.push(b); }
   }
 
   // Enemy AI
@@ -476,8 +541,9 @@ function update() {
   }
 
   // Check wave clear
-  if (enemies.every(e => !e.alive) && lives > 0 && baseAlive) {
-    setTimeout(nextWave, 1000);
+  if (enemies.every(e => !e.alive) && lives > 0 && baseAlive && !waveSpawning) {
+    waveSpawning = true;
+    setTimeout(() => { nextWave(); waveSpawning = false; }, 1000);
   }
 
   // Update particles
@@ -491,66 +557,24 @@ function endGame() {
   document.getElementById('gameOver').style.display = 'block';
 }
 
-function drawMap() {
+
+function draw() {
+  // Draw static background from cache
+  ctx.drawImage(bgCanvas, 0, 0);
+
+  // Animated water tiles
+  const t = Date.now() / 500;
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
+      if (map[r][c] !== WATER) continue;
       const x = c * TILE, y = r * TILE;
-      const tile = map[r][c];
-      if (tile === 0) continue;
-      if (tile === WALL) {
-        ctx.fillStyle = '#963';
-        ctx.fillRect(x, y, TILE, TILE);
-        ctx.strokeStyle = '#741';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(x + 1, y + 1, TILE - 2, TILE - 2);
-        // Brick lines
-        ctx.strokeStyle = '#852';
-        ctx.beginPath();
-        ctx.moveTo(x, y + TILE / 2); ctx.lineTo(x + TILE, y + TILE / 2);
-        ctx.moveTo(x + TILE / 2, y); ctx.lineTo(x + TILE / 2, y + TILE / 2);
-        ctx.moveTo(x + TILE / 4, y + TILE / 2); ctx.lineTo(x + TILE / 4, y + TILE);
-        ctx.moveTo(x + TILE * 3 / 4, y + TILE / 2); ctx.lineTo(x + TILE * 3 / 4, y + TILE);
-        ctx.stroke();
-      } else if (tile === STEEL) {
-        ctx.fillStyle = '#aaa';
-        ctx.fillRect(x, y, TILE, TILE);
-        ctx.fillStyle = '#ccc';
-        ctx.fillRect(x + 3, y + 3, TILE - 6, TILE - 6);
-      } else if (tile === WATER) {
-        ctx.fillStyle = '#229';
-        ctx.fillRect(x, y, TILE, TILE);
-        ctx.fillStyle = '#44a';
-        const t = Date.now() / 500;
-        for (let i = 0; i < 3; i++) {
-          const wy = y + (i * TILE / 3 + t * 20) % TILE;
-          ctx.fillRect(x + 4, wy, TILE - 8, 3);
-        }
-      } else if (tile === BASE) {
-        // Draw a flag/base indicator
-        ctx.fillStyle = '#ff4';
-        ctx.fillRect(x + TILE/2 - 8, y + TILE/2 - 8, 16, 16);
-        ctx.fillStyle = '#f80';
-        ctx.beginPath();
-        ctx.arc(x + TILE/2, y + TILE/2, 6, 0, Math.PI * 2);
-        ctx.fill();
+      ctx.fillStyle = '#44a';
+      for (let i = 0; i < 3; i++) {
+        const wy = y + ((i * TILE / 3 + t * 20) % TILE);
+        ctx.fillRect(x + 4, wy, TILE - 8, 3);
       }
     }
   }
-}
-
-function draw() {
-  ctx.clearRect(0, 0, W, H);
-
-  // Background grid
-  ctx.strokeStyle = '#1a1a1a';
-  ctx.lineWidth = 1;
-  for (let r = 0; r < ROWS; r++) {
-    for (let c = 0; c < COLS; c++) {
-      ctx.strokeRect(c * TILE, r * TILE, TILE, TILE);
-    }
-  }
-
-  drawMap();
 
   // Draw tanks
   for (const enemy of enemies) { if (enemy.alive) enemy.draw(); }
