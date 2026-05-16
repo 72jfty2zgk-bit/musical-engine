@@ -76,7 +76,7 @@
     <div>波次: <span id="wave">1</span></div>
   </div>
   <canvas id="game"></canvas>
-  <div class="instructions">方向键移动 | 空格射击 | R重新开始</div>
+  <div class="instructions">WASD移动 | 空格射击 | R重新开始</div>
   <div class="game-over" id="gameOver">
     <div id="gameOverText">游戏结束</div>
     <button id="restartBtn">重新开始</button>
@@ -186,14 +186,14 @@ function cacheBackground() {
 // --- Input ---
 const keys = {};
 document.addEventListener('keydown', e => {
-  if (e.code === 'Space' || e.code.startsWith('Arrow') || e.code === 'KeyR') {
+  if (e.code === 'Space' || e.code === 'KeyW' || e.code === 'KeyA' || e.code === 'KeyS' || e.code === 'KeyD' || e.code === 'KeyR') {
     e.preventDefault();
     keys[e.code] = true;
     if (e.code === 'KeyR') resetGame();
   }
 });
 document.addEventListener('keyup', e => {
-  if (e.code === 'Space' || e.code.startsWith('Arrow')) {
+  if (e.code === 'Space' || e.code === 'KeyW' || e.code === 'KeyA' || e.code === 'KeyS' || e.code === 'KeyD') {
     e.preventDefault();
     keys[e.code] = false;
   }
@@ -443,10 +443,10 @@ function update() {
 
   // Player movement
   if (player && player.alive) {
-    if (keys['ArrowUp']) { player.dir = 0; player.moveForward(); }
-    else if (keys['ArrowDown']) { player.dir = 2; player.moveForward(); }
-    else if (keys['ArrowLeft']) { player.dir = 3; player.moveForward(); }
-    else if (keys['ArrowRight']) { player.dir = 1; player.moveForward(); }
+    if (keys['KeyW']) { player.dir = 0; player.moveForward(); }
+    else if (keys['KeyS']) { player.dir = 2; player.moveForward(); }
+    else if (keys['KeyA']) { player.dir = 3; player.moveForward(); }
+    else if (keys['KeyD']) { player.dir = 1; player.moveForward(); }
     if (keys['Space']) { const b = player.shoot(); if (b) bullets.push(b); }
   }
 
