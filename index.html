@@ -84,33 +84,54 @@
   }
   .overlay .keys-info span { color: #ff0; }
   .overlay.hidden { display: none; }
-  .game-over {
+  .result-overlay {
     position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    color: #f00;
-    font-size: 48px;
-    font-weight: bold;
-    text-align: center;
-    pointer-events: none;
-    text-shadow: 0 0 20px rgba(255,0,0,0.8);
-    display: none;
+    top: 0; left: 0;
+    width: 800px; height: 600px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.85);
     z-index: 10;
   }
-  .game-over button {
-    display: block;
-    margin: 20px auto 0;
-    padding: 10px 30px;
+  .result-overlay .result-title {
+    font-size: 52px;
+    font-weight: bold;
+    margin-bottom: 10px;
+    letter-spacing: 6px;
+  }
+  .result-overlay .result-subtitle {
+    font-size: 20px;
+    margin-bottom: 40px;
+    letter-spacing: 4px;
+  }
+  .result-overlay.win .result-title { color: #ff4; text-shadow: 0 0 30px rgba(255,255,0,0.6); }
+  .result-overlay.win .result-subtitle { color: #ca0; }
+  .result-overlay.lose .result-title { color: #f44; text-shadow: 0 0 20px rgba(255,0,0,0.6); }
+  .result-overlay.lose .result-subtitle { color: #a44; }
+  .result-overlay .btn-row {
+    display: flex;
+    gap: 20px;
+  }
+  .result-overlay button {
+    padding: 14px 36px;
     font-size: 22px;
-    background: #0a0;
-    color: #fff;
-    border: none;
+    border: 2px solid;
     cursor: pointer;
     font-family: inherit;
-    pointer-events: auto;
+    letter-spacing: 3px;
+    transition: all 0.2s;
   }
-  .game-over button:hover { background: #0c0; }
+  .result-overlay button.btn-primary {
+    background: #0a0; color: #fff; border-color: #0f0;
+  }
+  .result-overlay button.btn-primary:hover { background: #0c0; box-shadow: 0 0 16px rgba(0,255,0,0.4); }
+  .result-overlay button.btn-secondary {
+    background: #333; color: #aaa; border-color: #555;
+  }
+  .result-overlay button.btn-secondary:hover { background: #444; color: #fff; }
+  .result-overlay.hidden { display: none; }
   .instructions {
     color: #666;
     font-size: 13px;
@@ -136,9 +157,21 @@
       <span>R</span> 重新开始
     </div>
   </div>
-  <div class="game-over" id="gameOver">
-    <div id="gameOverText">游戏结束</div>
-    <button id="restartBtn">重新开始</button>
+  <div class="result-overlay win hidden" id="winScreen">
+    <div class="result-title">胜 利</div>
+    <div class="result-subtitle" id="winSubtitle">第 1 波 通关</div>
+    <div class="btn-row">
+      <button class="btn-primary" id="nextWaveBtn">下 一 关</button>
+      <button class="btn-secondary" id="winHomeBtn">回到主页</button>
+    </div>
+  </div>
+  <div class="result-overlay lose hidden" id="loseScreen">
+    <div class="result-title" id="loseTitle">游戏结束</div>
+    <div class="result-subtitle" id="loseSubtitle"></div>
+    <div class="btn-row">
+      <button class="btn-primary" id="retryBtn">重新挑战</button>
+      <button class="btn-secondary" id="loseHomeBtn">回到主页</button>
+    </div>
   </div>
 </div>
 
@@ -248,7 +281,7 @@ document.addEventListener('keydown', e => {
   if (e.code === 'Space' || e.code === 'KeyW' || e.code === 'KeyA' || e.code === 'KeyS' || e.code === 'KeyD' || e.code === 'KeyR') {
     e.preventDefault();
     keys[e.code] = true;
-    if (e.code === 'KeyR') resetGame();
+    if (e.code === 'KeyR' && gameRunning) resetGame();
   }
 });
 document.addEventListener('keyup', e => {
@@ -474,6 +507,7 @@ function spawnEnemies(count) {
 
 function resetGame() {
   score = 0; lives = 3; wave = 1;
+  waveSpawning = false;
   gameOverFlag = false;
   baseAlive = true;
   generateMap();
@@ -484,8 +518,9 @@ function resetGame() {
   document.getElementById('score').textContent = '0';
   document.getElementById('lives').textContent = '3';
   document.getElementById('wave').textContent = '1';
-  document.getElementById('gameOver').style.display = 'none';
   document.getElementById('startScreen').classList.add('hidden');
+  document.getElementById('winScreen').classList.add('hidden');
+  document.getElementById('loseScreen').classList.add('hidden');
   gameRunning = true;
 }
 
@@ -493,9 +528,38 @@ function nextWave() {
   wave++;
   document.getElementById('wave').textContent = wave;
   const count = 2 + wave;
-  // Reset player position
+  generateMap();
   player = new Tank(W / 2 - TILE / 2, H - TILE * 2, 0, '#4a4', true);
   spawnEnemies(count);
+  waveSpawning = false;
+}
+
+function retryWave() {
+  document.getElementById('loseScreen').classList.add('hidden');
+  gameOverFlag = false;
+  baseAlive = true;
+  generateMap();
+  player = new Tank(W / 2 - TILE / 2, H - TILE * 2, 0, '#4a4', true);
+  spawnEnemies(2 + wave);
+  bullets = [];
+  particles = [];
+  lives = 3;
+  document.getElementById('lives').textContent = '3';
+  gameRunning = true;
+}
+
+function goHome() {
+  gameRunning = false;
+  gameOverFlag = false;
+  waveSpawning = false;
+  enemies = [];
+  bullets = [];
+  particles = [];
+  player = null;
+  document.getElementById('startScreen').classList.remove('hidden');
+  document.getElementById('winScreen').classList.add('hidden');
+  document.getElementById('loseScreen').classList.add('hidden');
+  generateMap();
 }
 
 function update() {
@@ -603,7 +667,9 @@ function update() {
   // Check wave clear
   if (enemies.every(e => !e.alive) && lives > 0 && baseAlive && !waveSpawning) {
     waveSpawning = true;
-    setTimeout(() => { nextWave(); waveSpawning = false; }, 1000);
+    gameRunning = false;
+    document.getElementById('winSubtitle').textContent = '第 ' + wave + ' 波 通关';
+    document.getElementById('winScreen').classList.remove('hidden');
   }
 
   // Update particles
@@ -613,8 +679,14 @@ function update() {
 function endGame() {
   gameOverFlag = true;
   gameRunning = false;
-  document.getElementById('gameOverText').textContent = baseAlive ? '游戏结束' : '基地被摧毁!';
-  document.getElementById('gameOver').style.display = 'block';
+  if (!baseAlive) {
+    document.getElementById('loseTitle').textContent = '基地被摧毁';
+    document.getElementById('loseSubtitle').textContent = '第 ' + wave + ' 波 失败';
+  } else {
+    document.getElementById('loseTitle').textContent = '游戏结束';
+    document.getElementById('loseSubtitle').textContent = '第 ' + wave + ' 波 生命耗尽';
+  }
+  document.getElementById('loseScreen').classList.remove('hidden');
 }
 
 
@@ -656,8 +728,11 @@ function gameLoop() {
 }
 
 // Start
-document.getElementById('restartBtn').addEventListener('click', resetGame);
 document.getElementById('startBtn').addEventListener('click', resetGame);
+document.getElementById('nextWaveBtn').addEventListener('click', () => { document.getElementById('winScreen').classList.add('hidden'); gameRunning = true; nextWave(); });
+document.getElementById('retryBtn').addEventListener('click', retryWave);
+document.getElementById('winHomeBtn').addEventListener('click', goHome);
+document.getElementById('loseHomeBtn').addEventListener('click', goHome);
 generateMap(); // Show map behind start screen
 gameLoop();
 </script>
